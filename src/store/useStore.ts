@@ -1,11 +1,12 @@
 import { create } from 'zustand';
-import { v4 as uuidv4 } from 'uuid';
+import { persist } from 'zustand/middleware';
+import { supabase } from '../lib/supabase';
 
 export type FunnelStage = string;
 
 export interface Interaction {
   id: string;
-  type: 'Ligação' | 'WhatsApp' | 'Visita' | 'Email';
+  type: 'Ligação' | 'WhatsApp' | 'Visita' | 'Email' | 'Venda' | 'Status';
   description: string;
   date: string;
 }
@@ -22,6 +23,8 @@ export interface Client {
   address: string;
   birthDate: string;
   salesperson?: string;
+  notes?: string;
+  tags?: string[];
   stage: FunnelStage;
   interactions: Interaction[];
   createdAt: string;
@@ -31,6 +34,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  password?: string; // Optional for now since we're mocking, but needed for login
   role: 'gerente' | 'vendedor';
   photoUrl?: string;
 }
@@ -42,128 +46,721 @@ export interface Goals {
   currentSales: number;
 }
 
+export interface UserGoal extends Goals {
+  userId: string;
+}
+
 interface CRMStore {
-  currentUser: User;
+  isSidebarCollapsed: boolean;
+  toggleSidebar: () => void;
+  isAuthenticated: boolean;
+  currentUser: User | null;
   users: User[];
   clients: Client[];
   goals: Goals;
+  allGoals: UserGoal[];
   funnelStages: string[];
-  updateCurrentUser: (data: Partial<User>) => void;
-  addUser: (user: Omit<User, 'id'>) => void;
-  addClient: (client: Omit<Client, 'id' | 'interactions' | 'createdAt' | 'stage'>) => void;
-  updateClientStage: (id: string, stage: FunnelStage) => void;
-  addInteraction: (clientId: string, interaction: Omit<Interaction, 'id' | 'date'>) => void;
-  updateGoals: (goals: Partial<Goals>) => void;
-  incrementProspects: () => void;
-  incrementSales: () => void;
+  availableTags: string[];
+  theme: 'light' | 'dark';
+  primaryColor: string;
+  secondaryColor: string;
+  isLoading: boolean;
+  fetchInitialData: () => Promise<void>;
+  login: (email: string, password?: string) => Promise<boolean>;
+  register: (name: string, email: string, password?: string) => Promise<boolean>;
+  logout: () => Promise<void>;
+  updateCurrentUser: (data: Partial<User>) => Promise<void>;
+  addUser: (user: Omit<User, 'id'>) => Promise<void>;
+  deleteUser: (id: string) => Promise<void>;
+  addClient: (client: Omit<Client, 'id' | 'interactions' | 'createdAt' | 'stage'>) => Promise<void>;
+  updateClient: (id: string, clientData: Partial<Client>) => Promise<void>;
+  updateClientStage: (id: string, stage: FunnelStage) => Promise<void>;
+  addInteraction: (clientId: string, interaction: Omit<Interaction, 'id' | 'date'>) => Promise<void>;
+  updateGoals: (goals: Partial<Goals>) => Promise<void>;
+  updateUserGoals: (userId: string, goals: Partial<Goals>) => Promise<void>;
+  incrementProspects: () => Promise<void>;
+  incrementSales: () => Promise<void>;
   updateFunnelStages: (stages: string[]) => void;
+  addTag: (tag: string) => void;
+  toggleTheme: () => void;
+  updateThemeColors: (primary: string, secondary: string) => void;
+  resetAllSales: () => Promise<void>;
 }
 
-export const useCRMStore = create<CRMStore>((set) => ({
-  currentUser: {
-    id: 'u1',
-    name: 'Vendedor 1',
-    email: 'vendedor@loja.com',
-    role: 'gerente', // Set to gerente to test functionality
-  },
-  users: [
-    { id: 'u1', name: 'Vendedor 1', email: 'vendedor@loja.com', role: 'gerente' },
-    { id: 'u2', name: 'Vendedor 2', email: 'vendedor2@loja.com', role: 'vendedor' },
-  ],
-  clients: [
-    {
-      id: '1',
-      fullName: 'João Silva',
-      cpf: '123.456.789-00',
-      phone: '11999999999',
-      email: 'joao@email.com',
-      city: 'São Paulo',
-      address: 'Rua A, 123',
-      birthDate: '1990-01-01',
-      salesperson: 'Vendedor 1',
-      stage: 'Lead Novo',
-      interactions: [],
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: '2',
-      fullName: 'Maria Oliveira',
-      cpf: '987.654.321-11',
-      phone: '11888888888',
-      email: 'maria@email.com',
-      city: 'Rio de Janeiro',
-      address: 'Rua B, 456',
-      birthDate: '1985-05-15',
-      salesperson: 'Vendedor 2',
-      stage: 'Em Negociação',
-      interactions: [
-        { id: 'i1', type: 'WhatsApp', description: 'Enviado catálogo de SUVs', date: new Date().toISOString() }
-      ],
-      createdAt: new Date().toISOString(),
-    }
-  ],
-  goals: {
-    dailyProspects: 10,
-    monthlySales: 5,
-    currentProspects: 3,
-    currentSales: 1,
-  },
-  funnelStages: ['Lead Novo', 'Em Negociação', 'Ficha Aprovada', 'Vendido', 'Perdido'],
-  updateCurrentUser: (data) => set((state) => ({
-    currentUser: { ...state.currentUser, ...data },
-    users: state.users.map(u => u.id === state.currentUser.id ? { ...u, ...data } : u)
-  })),
-  addUser: (userData) => set((state) => ({
-    users: [...state.users, { ...userData, id: uuidv4() }]
-  })),
-  addClient: (clientData) => set((state) => {
-    const newClient: Client = {
-      ...clientData,
-      id: uuidv4(),
-      salesperson: clientData.salesperson || 'Vendedor 1',
-      stage: 'Lead Novo',
-      interactions: [],
-      createdAt: new Date().toISOString(),
-    };
-    return {
-      clients: [...state.clients, newClient],
-      goals: { ...state.goals, currentProspects: state.goals.currentProspects + 1 }
-    };
-  }),
-  updateClientStage: (id, stage) => set((state) => {
-    const updatedClients = state.clients.map(c => c.id === id ? { ...c, stage } : c);
-    let salesIncrement = 0;
-    if (stage === 'Vendido') {
-      const oldStage = state.clients.find(c => c.id === id)?.stage;
-      if (oldStage !== 'Vendido') salesIncrement = 1;
-    }
-    return {
-      clients: updatedClients,
-      goals: { ...state.goals, currentSales: state.goals.currentSales + salesIncrement }
-    };
-  }),
-  addInteraction: (clientId, interactionData) => set((state) => ({
-    clients: state.clients.map(c => {
-      if (c.id === clientId) {
-        return {
-          ...c,
-          interactions: [
-            ...c.interactions,
-            { ...interactionData, id: uuidv4(), date: new Date().toISOString() }
-          ]
-        };
+// Helper to map DB snake_case to App camelCase
+const mapClientFromDB = (dbClient: any): Client => ({
+  id: dbClient.id,
+  fullName: dbClient.full_name,
+  cpf: dbClient.cpf,
+  phone: dbClient.phone,
+  email: dbClient.email,
+  instagram: dbClient.instagram,
+  facebook: dbClient.facebook,
+  city: dbClient.city,
+  address: dbClient.address,
+  birthDate: dbClient.birth_date,
+  salesperson: dbClient.salesperson,
+  notes: dbClient.notes,
+  tags: dbClient.tags || [],
+  stage: dbClient.stage,
+  interactions: [],
+  createdAt: dbClient.created_at,
+});
+
+const mapUserFromDB = (dbUser: any): User => ({
+  id: dbUser.id,
+  name: dbUser.name,
+  email: dbUser.email,
+  password: dbUser.password,
+  role: dbUser.role,
+  photoUrl: dbUser.photo_url,
+});
+
+export const useCRMStore = create<CRMStore>()(
+  persist(
+    (set, get) => ({
+      isSidebarCollapsed: false,
+      toggleSidebar: () => set(state => ({ isSidebarCollapsed: !state.isSidebarCollapsed })),
+      isAuthenticated: false,
+      currentUser: null,
+      users: [],
+      clients: [],
+      goals: {
+        dailyProspects: 10,
+        monthlySales: 5,
+        currentProspects: 0,
+        currentSales: 0,
+      },
+      allGoals: [],
+      funnelStages: ['Lead Novo', 'Em Negociação', 'Ficha Aprovada', 'Vendido', 'Perdido'],
+      availableTags: ['Urgente', 'Financiamento', 'À Vista', 'Troca'],
+      theme: 'light',
+      primaryColor: '#2563eb', // blue-600
+      secondaryColor: '#9333ea', // purple-600
+      isLoading: false,
+
+  fetchInitialData: async () => {
+    set({ isLoading: true });
+    try {
+      // Fetch users
+      const { data: usersData } = await supabase.from('users').select('*');
+      if (usersData) {
+        set({ users: usersData.map(mapUserFromDB) });
       }
-      return c;
-    })
-  })),
-  updateGoals: (newGoals) => set((state) => ({
-    goals: { ...state.goals, ...newGoals }
-  })),
-  incrementProspects: () => set((state) => ({
-    goals: { ...state.goals, currentProspects: state.goals.currentProspects + 1 }
-  })),
-  incrementSales: () => set((state) => ({
-    goals: { ...state.goals, currentSales: state.goals.currentSales + 1 }
-  })),
+
+      // Fetch clients
+      const { data: clientsData } = await supabase.from('clients').select('*');
+      
+      // Fetch interactions
+      const { data: interactionsData } = await supabase.from('interactions').select('*');
+
+      if (clientsData) {
+        const mappedClients = clientsData.map(mapClientFromDB);
+        
+        // Attach interactions
+        if (interactionsData) {
+          interactionsData.forEach(interaction => {
+            const client = mappedClients.find(c => c.id === interaction.client_id);
+            if (client) {
+              client.interactions.push({
+                id: interaction.id,
+                type: interaction.type,
+                description: interaction.description,
+                date: interaction.date,
+              });
+            }
+          });
+        }
+        
+        set({ clients: mappedClients });
+      }
+
+      // Fetch goals for current user
+      const currentUser = get().currentUser;
+      if (currentUser) {
+        // Fetch all goals so everyone can see team progress
+        const { data: allGoalsData } = await supabase.from('goals').select('*');
+        if (allGoalsData) {
+          const mappedAllGoals = allGoalsData.map(g => ({
+            userId: g.user_id,
+            dailyProspects: g.daily_prospects,
+            monthlySales: g.monthly_sales,
+            currentProspects: g.current_prospects,
+            currentSales: g.current_sales,
+          }));
+          set({ allGoals: mappedAllGoals });
+
+          // Set current user's goals
+          const userGoals = mappedAllGoals.find(g => g.userId === currentUser.id);
+          if (userGoals) {
+            set({ goals: userGoals });
+          } else {
+            // Create initial goals if missing
+            const defaultGoals = {
+              user_id: currentUser.id,
+              daily_prospects: 10,
+              monthly_sales: 5,
+              current_prospects: 0,
+              current_sales: 0
+            };
+            await supabase.from('goals').insert([defaultGoals]);
+            const newGoal = {
+              userId: currentUser.id,
+              dailyProspects: defaultGoals.daily_prospects,
+              monthlySales: defaultGoals.monthly_sales,
+              currentProspects: defaultGoals.current_prospects,
+              currentSales: defaultGoals.current_sales,
+            };
+            set(state => ({ 
+              goals: newGoal,
+              allGoals: [...state.allGoals, newGoal]
+            }));
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  login: async (email, password) => {
+    set({ isLoading: true });
+    try {
+      // 1. Try Supabase Auth first
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password: password || '',
+      });
+
+      if (!authError && authData.user) {
+        // Auth success, get user data from public.users
+        const { data: userData } = await supabase
+          .from('users')
+          .select('*')
+          .eq('email', email)
+          .single();
+
+        let finalUser;
+
+        if (!userData) {
+          const { data: newUserData, error: insertError } = await supabase
+            .from('users')
+            .insert([{ 
+              id: authData.user.id, 
+              name: email.split('@')[0], 
+              email, 
+              role: 'vendedor' 
+            }])
+            .select()
+            .single();
+            
+          if (insertError) throw insertError;
+          finalUser = newUserData;
+          
+          await supabase.from('goals').insert([{
+            user_id: finalUser.id,
+            daily_prospects: 10,
+            monthly_sales: 5,
+            current_prospects: 0,
+            current_sales: 0
+          }]);
+        } else {
+          finalUser = userData;
+        }
+
+        set({ isAuthenticated: true, currentUser: mapUserFromDB(finalUser) });
+        await get().fetchInitialData();
+        return true;
+      }
+
+      // 2. Fallback for MVP: Check public.users table directly (for users added by manager)
+      const { data: simpleUser, error: simpleError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', email)
+        .eq('password', password)
+        .single();
+
+      if (simpleUser) {
+        set({ isAuthenticated: true, currentUser: mapUserFromDB(simpleUser) });
+        await get().fetchInitialData();
+        return true;
+      }
+
+      if (authError) throw authError;
+      return false;
+    } catch (error) {
+      console.error('Login error:', error);
+      return false;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  register: async (name, email, password) => {
+    set({ isLoading: true });
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password: password || '',
+        options: {
+          data: { name }, // Pass name to be used in the trigger
+        },
+      });
+
+      if (error || !data.user) {
+        console.error('Register error:', error?.message);
+        set({ isLoading: false });
+        return false;
+      }
+      
+      // The trigger will create the company and user profile.
+      // We need a small delay to ensure the trigger has run before fetching.
+      await new Promise(res => setTimeout(res, 1000)); 
+
+      // Re-fetch user data to get the user with company_id
+      const { data: userData } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', data.user.id)
+        .single();
+
+      if (userData) {
+        set({ isAuthenticated: true, currentUser: mapUserFromDB(userData) });
+        await get().fetchInitialData();
+        return true;
+      } else {
+        // Fallback if trigger is slow or fails
+        await supabase.auth.signOut();
+        return false;
+      }
+    } catch (error) {
+      console.error('Register error:', error);
+      return false;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  logout: async () => {
+    await supabase.auth.signOut();
+    set({ isAuthenticated: false, currentUser: null, clients: [] });
+  },
+
+  updateCurrentUser: async (data) => {
+    const currentUser = get().currentUser;
+    if (!currentUser) return;
+    
+    const updatePayload: any = {};
+    if (data.name) updatePayload.name = data.name;
+    if (data.email) updatePayload.email = data.email;
+    if (data.photoUrl) updatePayload.photo_url = data.photoUrl;
+
+    const { error } = await supabase
+      .from('users')
+      .update(updatePayload)
+      .eq('id', currentUser.id);
+
+    if (!error) {
+      set((state) => ({
+        currentUser: { ...state.currentUser!, ...data },
+        users: state.users.map(u => u.id === currentUser.id ? { ...u, ...data } : u)
+      }));
+    }
+  },
+
+  addUser: async (userData) => {
+    const state = get();
+    const currentUser = state.currentUser;
+    if (!currentUser || currentUser.role !== 'gerente') return;
+
+    // The RLS policy ensures we can only fetch the company_id of the current user's company.
+    const { data: companyData, error: companyError } = await supabase
+      .from('users')
+      .select('company_id')
+      .eq('id', currentUser.id)
+      .single();
+
+    if (companyError || !companyData) {
+      console.error('Could not fetch manager company ID:', companyError?.message);
+      return;
+    }
+
+    // Create the user in Supabase Auth
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email: userData.email,
+        password: userData.password || '',
+    });
+
+    if (signUpError || !signUpData.user) {
+        console.error('Error creating auth user:', signUpError?.message);
+        return;
+    }
+
+    // Add the user to the public.users table with the correct company_id
+    const { data: newUserData, error: insertError } = await supabase
+      .from('users')
+      .insert({
+        id: signUpData.user.id,
+        name: userData.name,
+        email: userData.email,
+        role: userData.role,
+        company_id: companyData.company_id,
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('Error inserting user profile:', insertError.message);
+      // Cleanup: remove the user from auth if profile insertion fails
+      // This requires admin privileges, so we'll just log the error for now.
+      // await supabase.auth.admin.deleteUser(signUpData.user.id);
+      return;
+    }
+
+    if (newUserData) {
+      set((state) => ({ users: [...state.users, mapUserFromDB(newUserData)] }));
+      // Create initial goals for the new user
+      await supabase.from('goals').insert([{
+        user_id: newUserData.id,
+        daily_prospects: 10,
+        monthly_sales: 5,
+        current_prospects: 0,
+        current_sales: 0
+      }]);
+    }
+  },
+
+  deleteUser: async (id) => {
+    console.log(`[deleteUser] Iniciando exclusão para o ID: ${id}`);
+    try {
+      const { data, error } = await supabase.functions.invoke('delete-user', {
+        body: { userIdToDelete: id },
+      });
+
+      // Log completo da resposta para depuração
+      console.log('[deleteUser] Resposta recebida da Edge Function:', { data, error });
+
+      if (error) {
+        // Erro de rede ou na chamada da função
+        throw new Error(`Erro de rede/chamada: ${error.message}`);
+      }
+
+      // A função pode retornar um erro dentro do objeto 'data'
+      if (data && data.error) {
+        throw new Error(`Erro retornado pela função: ${data.error}`);
+      }
+
+      // Se a exclusão for bem-sucedida, a função deve retornar uma mensagem de sucesso
+      console.log('[deleteUser] Exclusão bem-sucedida no servidor. Atualizando estado local.');
+      set((state) => ({
+        users: state.users.filter(u => u.id !== id)
+      }));
+      alert('Usuário excluído com sucesso!');
+
+    } catch (e) {
+      const err = e as Error;
+      console.error('[deleteUser] Ocorreu uma falha no processo de exclusão:', err);
+      alert(`ERRO: Não foi possível excluir o usuário. Verifique o console do navegador para detalhes técnicos (F12 > Console).`);
+    }
+  },
+
+  addClient: async (clientData) => {
+    const currentUser = get().currentUser;
+    const salespersonName = clientData.salesperson || currentUser?.name || 'Vendedor';
+
+    const insertPayload = {
+      full_name: clientData.fullName,
+      cpf: clientData.cpf,
+      phone: clientData.phone,
+      email: clientData.email,
+      instagram: clientData.instagram,
+      facebook: clientData.facebook,
+      city: clientData.city,
+      address: clientData.address,
+      birth_date: clientData.birthDate || null,
+      salesperson: salespersonName,
+      stage: 'Lead Novo'
+    };
+
+    const { data, error } = await supabase
+      .from('clients')
+      .insert([insertPayload])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error adding client:', error);
+      return;
+    }
+
+    if (data) {
+      const newClient = mapClientFromDB(data);
+      set((state) => ({
+        clients: [...state.clients, newClient]
+      }));
+      await get().incrementProspects();
+    }
+  },
+
+  updateClient: async (id, clientData) => {
+    const updatePayload: any = {};
+    if (clientData.fullName !== undefined) updatePayload.full_name = clientData.fullName;
+    if (clientData.cpf !== undefined) updatePayload.cpf = clientData.cpf;
+    if (clientData.phone !== undefined) updatePayload.phone = clientData.phone;
+    if (clientData.email !== undefined) updatePayload.email = clientData.email;
+    if (clientData.instagram !== undefined) updatePayload.instagram = clientData.instagram;
+    if (clientData.facebook !== undefined) updatePayload.facebook = clientData.facebook;
+    if (clientData.city !== undefined) updatePayload.city = clientData.city;
+    if (clientData.address !== undefined) updatePayload.address = clientData.address;
+    if (clientData.birthDate !== undefined) updatePayload.birth_date = clientData.birthDate || null;
+
+    const { error } = await supabase
+      .from('clients')
+      .update(updatePayload)
+      .eq('id', id);
+
+    if (!error) {
+      set((state) => ({
+        clients: state.clients.map(c => c.id === id ? { ...c, ...clientData } : c)
+      }));
+    }
+  },
+
+  updateClientStage: async (id, stage) => {
+    const state = get();
+    const client = state.clients.find(c => c.id === id);
+    const oldStage = client?.stage;
+    
+    const { error } = await supabase
+      .from('clients')
+      .update({ stage })
+      .eq('id', id);
+
+    if (!error) {
+      // Create the interaction record for the stage change
+      if (oldStage && oldStage !== stage) {
+        const description = `Status alterado de "${oldStage}" para "${stage}".`;
+        const { data: interactionData, error: interactionError } = await supabase
+          .from('interactions')
+          .insert([{ client_id: id, type: 'Status', description }])
+          .select()
+          .single();
+        
+        if (!interactionError && interactionData) {
+          // Update state with both changes at once
+          set(state => ({
+            clients: state.clients.map(c => {
+              if (c.id === id) {
+                return { 
+                  ...c, 
+                  stage,
+                  interactions: [...c.interactions, { id: interactionData.id, type: interactionData.type, description: interactionData.description, date: interactionData.date }]
+                };
+              }
+              return c;
+            })
+          }));
+        } else {
+          // If interaction fails to log, still update the stage locally
+          set(state => ({ clients: state.clients.map(c => c.id === id ? { ...c, stage } : c) }));
+        }
+      } else {
+         // If no stage change, just update the stage in the state
+         set(state => ({
+            clients: state.clients.map(c => c.id === id ? { ...c, stage } : c)
+         }));
+      }
+      
+      if (stage === 'Vendido' && oldStage !== 'Vendido') {
+        await get().incrementSales();
+      }
+    }
+  },
+
+  addInteraction: async (clientId, interactionData) => {
+    const { data, error } = await supabase
+      .from('interactions')
+      .insert([{
+        client_id: clientId,
+        type: interactionData.type,
+        description: interactionData.description
+      }])
+      .select()
+      .single();
+
+    if (data) {
+      set((state) => ({
+        clients: state.clients.map(c => {
+          if (c.id === clientId) {
+            return {
+              ...c,
+              interactions: [
+                ...c.interactions,
+                { id: data.id, type: data.type, description: data.description, date: data.date }
+              ]
+            };
+          }
+          return c;
+        })
+      }));
+    }
+  },
+
+  updateGoals: async (newGoals) => {
+    const currentUser = get().currentUser;
+    if (!currentUser) return;
+
+    const updatePayload: any = {};
+    if (newGoals.dailyProspects !== undefined) updatePayload.daily_prospects = newGoals.dailyProspects;
+    if (newGoals.monthlySales !== undefined) updatePayload.monthly_sales = newGoals.monthlySales;
+
+    const { error } = await supabase
+      .from('goals')
+      .update(updatePayload)
+      .eq('user_id', currentUser.id);
+
+    if (!error) {
+      set((state) => ({
+        goals: { ...state.goals, ...newGoals },
+        allGoals: state.allGoals.map(g => g.userId === currentUser.id ? { ...g, ...newGoals } : g)
+      }));
+    }
+  },
+
+  updateUserGoals: async (userId, newGoals) => {
+    const updatePayload: any = {};
+    if (newGoals.dailyProspects !== undefined) updatePayload.daily_prospects = newGoals.dailyProspects;
+    if (newGoals.monthlySales !== undefined) updatePayload.monthly_sales = newGoals.monthlySales;
+
+    const { error } = await supabase
+      .from('goals')
+      .update(updatePayload)
+      .eq('user_id', userId);
+
+    if (!error) {
+      set((state) => {
+        const updatedAllGoals = state.allGoals.map(g => g.userId === userId ? { ...g, ...newGoals } : g);
+        const newState: any = { allGoals: updatedAllGoals };
+        
+        // If updating current user's goals, update the main goals object too
+        if (state.currentUser?.id === userId) {
+          newState.goals = { ...state.goals, ...newGoals };
+        }
+        
+        return newState;
+      });
+    }
+  },
+
+  incrementProspects: async () => {
+    const currentUser = get().currentUser;
+    const currentGoals = get().goals;
+    if (!currentUser) return;
+
+    const newProspects = currentGoals.currentProspects + 1;
+    
+    const { error } = await supabase
+      .from('goals')
+      .update({ current_prospects: newProspects })
+      .eq('user_id', currentUser.id);
+
+    if (!error) {
+      set((state) => ({
+        goals: { ...state.goals, currentProspects: newProspects },
+        allGoals: state.allGoals.map(g => g.userId === currentUser.id ? { ...g, currentProspects: newProspects } : g)
+      }));
+    }
+  },
+
+  incrementSales: async () => {
+    const currentUser = get().currentUser;
+    const currentGoals = get().goals;
+    if (!currentUser) return;
+
+    const newSales = currentGoals.currentSales + 1;
+    
+    const { error } = await supabase
+      .from('goals')
+      .update({ current_sales: newSales })
+      .eq('user_id', currentUser.id);
+
+    if (!error) {
+      set((state) => ({
+        goals: { ...state.goals, currentSales: newSales },
+        allGoals: state.allGoals.map(g => g.userId === currentUser.id ? { ...g, currentSales: newSales } : g)
+      }));
+    }
+  },
+
   updateFunnelStages: (stages) => set({ funnelStages: stages }),
-}));
+  
+  addTag: (tag) => set((state) => {
+    if (!state.availableTags.includes(tag)) {
+      return { availableTags: [...state.availableTags, tag] };
+    }
+    return state;
+  }),
+  
+      toggleTheme: () => set((state) => ({ theme: state.theme === 'light' ? 'dark' : 'light' })),
+  
+  updateThemeColors: (primary, secondary) => set({ primaryColor: primary, secondaryColor: secondary }),
+
+  resetAllSales: async () => {
+    // Reset clients stage
+    const { data: clientsToReset, error: fetchError } = await supabase
+      .from('clients')
+      .select('id')
+      .eq('stage', 'Vendido');
+
+    if (fetchError) {
+      console.error('Error fetching clients to reset:', fetchError);
+      return;
+    }
+
+    if (clientsToReset && clientsToReset.length > 0) {
+      const idsToReset = clientsToReset.map(c => c.id);
+      const { error: updateError } = await supabase
+        .from('clients')
+        .update({ stage: 'Contato Inicial' })
+        .in('id', idsToReset);
+      if (updateError) {
+        console.error('Error resetting client stages:', updateError);
+        return;
+      }
+    }
+
+    // Reset goals
+    const { error: goalsError } = await supabase
+      .from('goals')
+      .update({ current_sales: 0 });
+    
+    if (goalsError) {
+      console.error('Error resetting goals:', goalsError);
+      return;
+    }
+
+    // Update state locally
+    set((state) => ({
+      clients: state.clients.map(c => c.stage === 'Vendido' ? { ...c, stage: 'Contato Inicial' } : c),
+      allGoals: state.allGoals.map(g => ({ ...g, currentSales: 0 })),
+      goals: { ...state.goals, currentSales: 0 },
+    }));
+  },
+    }),
+    {
+      name: 'crm-storage',
+      partialize: (state) => ({ 
+        isSidebarCollapsed: state.isSidebarCollapsed,
+        isAuthenticated: state.isAuthenticated, 
+        currentUser: state.currentUser,
+        theme: state.theme,
+        primaryColor: state.primaryColor,
+        secondaryColor: state.secondaryColor,
+        availableTags: state.availableTags
+      }),
+    }
+  )
+);

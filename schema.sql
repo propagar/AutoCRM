@@ -24,6 +24,8 @@ CREATE TABLE clientes (
     endereco TEXT,
     data_nascimento DATE,
     etapa_funil VARCHAR(50) DEFAULT 'Lead Novo', -- Lead Novo, Em Negociação, Ficha Aprovada, Vendido, Perdido
+    notas TEXT,
+    tags TEXT[],
     criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
