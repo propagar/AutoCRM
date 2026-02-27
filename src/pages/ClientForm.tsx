@@ -88,15 +88,15 @@ export function ClientForm() {
       const client = clients.find(c => c.id === id);
       if (client) {
         setFormData({
-          fullName: client.fullName,
-          cpf: client.cpf,
-          phone: client.phone,
-          email: client.email,
+          fullName: client.fullName || '',
+          cpf: client.cpf || '',
+          phone: client.phone || '',
+          email: client.email || '',
           instagram: client.instagram || '',
           facebook: client.facebook || '',
-          city: client.city,
-          address: client.address,
-          birthDate: client.birthDate,
+          city: client.city || '',
+          address: client.address || '',
+          birthDate: client.birthDate || '',
           notes: client.notes || '',
           tags: client.tags || [],
         });

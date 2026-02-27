@@ -22,8 +22,8 @@ export function Kanban() {
   // Get unique salespeople from clients list
   const salespeople = Array.from(new Set(clients.map(c => c.salesperson).filter(Boolean))) as string[];
 
-  // Show all stages in the main board
-  const activeStages = funnelStages;
+  // Show all stages in the main board except 'Base de Clientes'
+  const activeStages = funnelStages.filter(s => s !== 'Base de Clientes');
 
   const filteredClients = clients.filter(c => 
     selectedSalesperson === 'Todos' || c.salesperson === selectedSalesperson

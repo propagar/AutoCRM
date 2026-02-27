@@ -88,7 +88,7 @@ interface CRMStore {
   addUser: (user: Omit<User, 'id'>) => Promise<void>;
   updateCompany: (companyId: string, companyData: Partial<Company>) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
-  addClient: (client: Omit<Client, 'id' | 'interactions' | 'createdAt' | 'stage'>) => Promise<void>;
+  addClient: (client: Omit<Client, 'id' | 'interactions' | 'createdAt' | 'stage'>, options?: { isImport?: boolean }) => Promise<void>;
   updateClient: (id: string, clientData: Partial<Client>) => Promise<void>;
   updateClientStage: (id: string, stage: FunnelStage) => Promise<void>;
   addInteraction: (clientId: string, interaction: Omit<Interaction, 'id' | 'date'>) => Promise<void>;
@@ -101,7 +101,9 @@ interface CRMStore {
   toggleTheme: () => void;
   updateThemeColors: (primary: string, secondary: string) => void;
   resetAllSales: () => Promise<void>;
+  resetAllProspects: () => Promise<void>;
   resetCurrentUsersSales: () => Promise<void>;
+  resetDailyProspects: () => Promise<void>;
 }
 
 // Helper to map DB snake_case to App camelCase
@@ -150,7 +152,7 @@ export const useCRMStore = create<CRMStore>()(
         currentSales: 0,
       },
       allGoals: [],
-      funnelStages: ['Lead Novo', 'Em Negociação', 'Ficha Aprovada', 'Vendido', 'Perdido'],
+      funnelStages: ['Base de Clientes', 'Lead Novo', 'Em Negociação', 'Ficha Aprovada', 'Vendido', 'Perdido'],
       availableTags: ['Urgente', 'Financiamento', 'À Vista', 'Troca'],
       theme: 'light',
       primaryColor: '#2563eb', // blue-600
@@ -159,6 +161,13 @@ export const useCRMStore = create<CRMStore>()(
 
   fetchInitialData: async () => {
     set({ isLoading: true });
+    
+    // Ensure 'Base de Clientes' is in funnelStages
+    const currentStages = get().funnelStages;
+    if (!currentStages.includes('Base de Clientes')) {
+      set({ funnelStages: ['Base de Clientes', ...currentStages] });
+    }
+
     try {
       // Fetch users
       const { data: usersData } = await supabase.from('users').select('*');
@@ -522,9 +531,10 @@ export const useCRMStore = create<CRMStore>()(
     }
   },
 
-  addClient: async (clientData) => {
+  addClient: async (clientData, options) => {
     const currentUser = get().currentUser;
     const salespersonName = clientData.salesperson || currentUser?.name || 'Vendedor';
+    const isImport = options?.isImport || false;
 
     const insertPayload = {
       full_name: clientData.fullName,
@@ -537,7 +547,7 @@ export const useCRMStore = create<CRMStore>()(
       address: clientData.address,
       birth_date: clientData.birthDate || null,
       salesperson: salespersonName,
-      stage: 'Lead Novo'
+      stage: isImport ? 'Base de Clientes' : 'Lead Novo'
     };
 
     const { data, error } = await supabase
@@ -556,7 +566,10 @@ export const useCRMStore = create<CRMStore>()(
       set((state) => ({
         clients: [...state.clients, newClient]
       }));
-      await get().incrementProspects();
+      
+      if (!isImport) {
+        await get().incrementProspects();
+      }
     }
   },
 
@@ -632,6 +645,10 @@ export const useCRMStore = create<CRMStore>()(
       if (stage === 'Vendido' && oldStage !== 'Vendido') {
         await get().incrementSales();
       }
+
+      if (oldStage === 'Base de Clientes' && stage !== 'Base de Clientes' && stage !== 'Perdido') {
+        await get().incrementProspects();
+      }
     }
   },
 
@@ -689,6 +706,8 @@ export const useCRMStore = create<CRMStore>()(
     const updatePayload: any = {};
     if (newGoals.dailyProspects !== undefined) updatePayload.daily_prospects = newGoals.dailyProspects;
     if (newGoals.monthlySales !== undefined) updatePayload.monthly_sales = newGoals.monthlySales;
+    if (newGoals.currentProspects !== undefined) updatePayload.current_prospects = newGoals.currentProspects;
+    if (newGoals.currentSales !== undefined) updatePayload.current_sales = newGoals.currentSales;
 
     const { error } = await supabase
       .from('goals')
@@ -750,6 +769,23 @@ export const useCRMStore = create<CRMStore>()(
     }
   },
 
+  resetDailyProspects: async () => {
+    const currentUser = get().currentUser;
+    if (!currentUser) return;
+
+    const { error } = await supabase
+      .from('goals')
+      .update({ current_prospects: 0 })
+      .eq('user_id', currentUser.id);
+
+    if (!error) {
+      set((state) => ({
+        goals: { ...state.goals, currentProspects: 0 },
+        allGoals: state.allGoals.map(g => g.userId === currentUser.id ? { ...g, currentProspects: 0 } : g)
+      }));
+    }
+  },
+
   updateFunnelStages: (stages) => set({ funnelStages: stages }),
   
   addTag: (tag) => set((state) => {
@@ -787,10 +823,11 @@ export const useCRMStore = create<CRMStore>()(
       }
     }
 
-    // Reset goals
+    // Reset goals - using a filter to ensure it works with RLS/Safe updates
     const { error: goalsError } = await supabase
       .from('goals')
-      .update({ current_sales: 0 });
+      .update({ current_sales: 0 })
+      .not('user_id', 'is', null);
     
     if (goalsError) {
       console.error('Error resetting goals:', goalsError);
@@ -802,6 +839,23 @@ export const useCRMStore = create<CRMStore>()(
       clients: state.clients.map(c => c.stage === 'Vendido' ? { ...c, stage: 'Contato Inicial' } : c),
       allGoals: state.allGoals.map(g => ({ ...g, currentSales: 0 })),
       goals: { ...state.goals, currentSales: 0 },
+    }));
+  },
+
+  resetAllProspects: async () => {
+    const { error } = await supabase
+      .from('goals')
+      .update({ current_prospects: 0 })
+      .not('user_id', 'is', null);
+    
+    if (error) {
+      console.error('Error resetting all prospects:', error);
+      return;
+    }
+
+    set((state) => ({
+      allGoals: state.allGoals.map(g => ({ ...g, currentProspects: 0 })),
+      goals: { ...state.goals, currentProspects: 0 },
     }));
   },
 

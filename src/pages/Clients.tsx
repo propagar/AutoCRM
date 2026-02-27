@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useCRMStore, FunnelStage } from '../store/useStore';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, Download, Upload, MoreVertical, Phone, MessageCircle, ChevronDown } from 'lucide-react';
+import { ImportClientsModal } from '../components/ImportClientsModal';
 
 export function Clients() {
   const { clients, updateClientStage, funnelStages, users, currentUser } = useCRMStore();
@@ -15,6 +16,7 @@ export function Clients() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSalesperson, setSelectedSalesperson] = useState(salespersonFilterFromURL || 'Todos');
   const [filterStage, setFilterStage] = useState(stageFilterFromURL || 'Todos');
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   // Get unique salespeople from clients list
   const salespeople = Array.from(new Set(clients.map(c => c.salesperson).filter(Boolean))) as string[];
@@ -66,7 +68,10 @@ export function Clients() {
           <p className="text-sm text-gray-500 dark:text-gray-400">Gerencie sua carteira de clientes.</p>
         </div>
         <div className="flex gap-2 w-full md:w-auto">
-          <button className="flex-1 md:flex-none flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-zinc-800 shadow-sm text-sm font-medium rounded-xl text-gray-700 dark:text-gray-300 bg-white dark:bg-zinc-900 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors">
+          <button 
+            onClick={() => setIsImportModalOpen(true)}
+            className="flex-1 md:flex-none flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-zinc-800 shadow-sm text-sm font-medium rounded-xl text-gray-700 dark:text-gray-300 bg-white dark:bg-zinc-900 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
+          >
             <Upload className="w-4 h-4 mr-2" />
             Importar
           </button>
@@ -208,6 +213,11 @@ export function Clients() {
           </table>
         </div>
       </div>
+
+      <ImportClientsModal 
+        isOpen={isImportModalOpen} 
+        onClose={() => setIsImportModalOpen(false)} 
+      />
     </div>
   );
 }

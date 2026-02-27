@@ -4,7 +4,7 @@ import { Target, TrendingUp, Award, Users, ChevronDown, Save, RefreshCcw } from 
 import { cn } from '../utils/cn';
 
 export function Goals() {
-  const { goals, allGoals, users, updateGoals, updateUserGoals, currentUser, resetCurrentUsersSales } = useCRMStore();
+  const { goals, allGoals, users, updateGoals, updateUserGoals, currentUser, resetCurrentUsersSales, resetDailyProspects, resetAllSales, resetAllProspects } = useCRMStore();
   
   const [isManagerView, setIsManagerView] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string>('');
@@ -150,14 +150,6 @@ export function Goals() {
                     ? '🏆 Meta batida!' 
                     : `Faltam ${Math.max(0, goals.monthlySales - goals.currentSales)} vendas.`}
                 </p>
-                <div className="mt-4 text-center">
-                  <button 
-                    onClick={resetCurrentUsersSales}
-                    className="text-xs text-red-600 dark:text-red-400 hover:underline"
-                  >
-                    Zerar esta meta pessoal.
-                  </button>
-                </div>
               </div>
             </div>
           </section>
@@ -227,26 +219,57 @@ export function Goals() {
               </div>
 
               {selectedUserId && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-top-2 duration-300">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Meta Diária de Prospecções</label>
-                    <input
-                      type="number"
-                      value={editGoals.dailyProspects}
-                      onChange={(e) => setEditGoals({...editGoals, dailyProspects: Number(e.target.value)})}
-                      className="block w-full px-4 py-3 border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-gray-900 dark:text-white rounded-xl focus:ring-primary focus:border-primary"
-                    />
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Meta Diária de Prospecções</label>
+                      <input
+                        type="number"
+                        value={editGoals.dailyProspects}
+                        onChange={(e) => setEditGoals({...editGoals, dailyProspects: Number(e.target.value)})}
+                        className="block w-full px-4 py-3 border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-gray-900 dark:text-white rounded-xl focus:ring-primary focus:border-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Meta Mensal de Vendas</label>
+                      <input
+                        type="number"
+                        value={editGoals.monthlySales}
+                        onChange={(e) => setEditGoals({...editGoals, monthlySales: Number(e.target.value)})}
+                        className="block w-full px-4 py-3 border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-gray-900 dark:text-white rounded-xl focus:ring-primary focus:border-primary"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Meta Mensal de Vendas</label>
-                    <input
-                      type="number"
-                      value={editGoals.monthlySales}
-                      onChange={(e) => setEditGoals({...editGoals, monthlySales: Number(e.target.value)})}
-                      className="block w-full px-4 py-3 border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-gray-900 dark:text-white rounded-xl focus:ring-primary focus:border-primary"
-                    />
+
+                  <div className="flex flex-wrap gap-3 pt-2">
+                    <button 
+                      onClick={async () => {
+                        const user = salespeople.find(u => u.id === selectedUserId);
+                        if(confirm(`Zerar prospecções diárias de ${user?.name}?`)) {
+                          await updateUserGoals(selectedUserId, { currentProspects: 0 });
+                          setShowSuccessToast(true);
+                          setTimeout(() => setShowSuccessToast(false), 3000);
+                        }
+                      }}
+                      className="flex-1 py-2 px-4 bg-red-50 dark:bg-red-900/10 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-900/20 rounded-xl text-xs font-bold hover:bg-red-100 transition-colors"
+                    >
+                      Zerar Prospecções de Hoje
+                    </button>
+                    <button 
+                      onClick={async () => {
+                        const user = salespeople.find(u => u.id === selectedUserId);
+                        if(confirm(`Zerar vendas mensais de ${user?.name}?`)) {
+                          await updateUserGoals(selectedUserId, { currentSales: 0 });
+                          setShowSuccessToast(true);
+                          setTimeout(() => setShowSuccessToast(false), 3000);
+                        }
+                      }}
+                      className="flex-1 py-2 px-4 bg-red-50 dark:bg-red-900/10 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-900/20 rounded-xl text-xs font-bold hover:bg-red-100 transition-colors"
+                    >
+                      Zerar Vendas do Mês
+                    </button>
                   </div>
-                </div>
+                </>
               )}
 
               <div className="flex justify-end pt-4">
@@ -263,43 +286,112 @@ export function Goals() {
           </div>
 
           {/* Resumo da Equipe para o Gerente */}
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-800 p-6 transition-colors">
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6">Desempenho da Equipe</h3>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-zinc-800">
-                <thead>
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Vendedor</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Prospecções (Hoje)</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Vendas (Mês)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-zinc-800">
-                  {salespeople.map(user => {
-                    const userGoal = allGoals.find(g => g.userId === user.id);
-                    return (
-                      <tr key={user.id}>
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="w-8 h-8 rounded-full bg-primary-light text-primary flex items-center justify-center font-bold mr-3">
-                              {user.name.charAt(0)}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-800 p-6 transition-colors">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6">Desempenho da Equipe</h3>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-zinc-800">
+                  <thead>
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Vendedor</th>
+                      <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Prospecções</th>
+                      <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Vendas</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-zinc-800">
+                    {salespeople.map(user => {
+                      const userGoal = allGoals.find(g => g.userId === user.id);
+                      return (
+                        <tr key={user.id}>
+                          <td className="px-4 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="w-8 h-8 rounded-full bg-primary-light text-primary flex items-center justify-center font-bold mr-3">
+                                {user.name.charAt(0)}
+                              </div>
+                              <span className="text-sm font-medium text-gray-900 dark:text-white">{user.name}</span>
                             </div>
-                            <span className="text-sm font-medium text-gray-900 dark:text-white">{user.name}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <span className="text-sm text-gray-900 dark:text-white font-bold">{userGoal?.currentProspects || 0}</span>
-                          <span className="text-xs text-gray-500 ml-1">/ {userGoal?.dailyProspects || 0}</span>
-                        </td>
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <span className="text-sm text-gray-900 dark:text-white font-bold">{userGoal?.currentSales || 0}</span>
-                          <span className="text-xs text-gray-500 ml-1">/ {userGoal?.monthlySales || 0}</span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          </td>
+                          <td className="px-4 py-4 whitespace-nowrap">
+                            <span className="text-sm text-gray-900 dark:text-white font-bold">{userGoal?.currentProspects || 0}</span>
+                          </td>
+                          <td className="px-4 py-4 whitespace-nowrap">
+                            <span className="text-sm text-gray-900 dark:text-white font-bold">{userGoal?.currentSales || 0}</span>
+                          </td>
+                          <td className="px-4 py-4 whitespace-nowrap text-right space-x-2">
+                            <button 
+                              onClick={async () => {
+                                if(confirm(`Zerar prospecções de ${user.name}?`)) {
+                                  await updateUserGoals(user.id, { currentProspects: 0 });
+                                  setShowSuccessToast(true);
+                                  setTimeout(() => setShowSuccessToast(false), 3000);
+                                }
+                              }}
+                              className="text-[10px] bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-400 px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 transition-colors"
+                            >
+                              Zerar Pr.
+                            </button>
+                            <button 
+                              onClick={async () => {
+                                if(confirm(`Zerar vendas de ${user.name}?`)) {
+                                  await updateUserGoals(user.id, { currentSales: 0 });
+                                  setShowSuccessToast(true);
+                                  setTimeout(() => setShowSuccessToast(false), 3000);
+                                }
+                              }}
+                              className="text-[10px] bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-400 px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 transition-colors"
+                            >
+                              Zerar V.
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-red-100 dark:border-red-900/20 p-6 transition-colors">
+              <h3 className="text-lg font-bold text-red-600 dark:text-red-400 mb-6 flex items-center">
+                <RefreshCcw className="w-5 h-5 mr-2" />
+                Zona de Perigo (Ações Globais)
+              </h3>
+              <div className="space-y-4">
+                <div className="p-4 bg-red-50 dark:bg-red-900/10 rounded-xl border border-red-100 dark:border-red-900/20">
+                  <h4 className="text-sm font-bold text-red-700 dark:text-red-400 mb-1">Zerar Prospecções Diárias</h4>
+                  <p className="text-xs text-red-600/70 dark:text-red-400/60 mb-3">Isso resetará o contador de prospecções de TODOS os vendedores para zero.</p>
+                  <button 
+                    onClick={async () => {
+                      if(confirm('Tem certeza que deseja zerar as prospecções de toda a equipe?')) {
+                        await resetAllProspects();
+                        setShowSuccessToast(true);
+                        setTimeout(() => setShowSuccessToast(false), 3000);
+                      }
+                    }}
+                    className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition-colors"
+                  >
+                    Zerar Todas as Prospecções
+                  </button>
+                </div>
+
+                <div className="p-4 bg-red-50 dark:bg-red-900/10 rounded-xl border border-red-100 dark:border-red-900/20">
+                  <h4 className="text-sm font-bold text-red-700 dark:text-red-400 mb-1">Zerar Vendas Mensais</h4>
+                  <p className="text-xs text-red-600/70 dark:text-red-400/60 mb-3">Isso resetará o contador de vendas de TODOS os vendedores para zero.</p>
+                  <button 
+                    onClick={async () => {
+                      if(confirm('Tem certeza que deseja zerar as vendas de toda a equipe?')) {
+                        await resetAllSales();
+                        setShowSuccessToast(true);
+                        setTimeout(() => setShowSuccessToast(false), 3000);
+                      }
+                    }}
+                    className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition-colors"
+                  >
+                    Zerar Todas as Vendas
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

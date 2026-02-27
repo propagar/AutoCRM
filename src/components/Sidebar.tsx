@@ -7,7 +7,7 @@ const navLinks = [
   { icon: LayoutDashboard, text: 'Dashboard', path: '/' },
   { icon: PlusCircle, text: 'Prospecção', path: '/novo-cliente' },
   { icon: BarChart2, text: 'Kanban', path: '/kanban' },
-  { icon: Users, text: 'Meus Clientes', path: '/clientes' },
+  { icon: Users, text: 'Clientes', path: '/clientes' },
   { icon: Target, text: 'Metas', path: '/metas' },
   { icon: Settings, text: 'Configurações', path: '/configuracoes' },
 ];
