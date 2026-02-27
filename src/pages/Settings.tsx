@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useCRMStore } from '../store/useStore';
-import { Camera, Save, UserPlus, Mail, User, Shield, ChevronDown, ChevronUp, Key, Trash2, Paintbrush } from 'lucide-react';
+import { Camera, Save, UserPlus, Mail, User, Shield, ChevronDown, ChevronUp, Key, Trash2, Paintbrush, Building2, CheckCircle } from 'lucide-react';
 
 export function Settings() {
-  const { currentUser, updateCurrentUser, users, addUser, deleteUser, primaryColor, secondaryColor, updateThemeColors, resetAllSales } = useCRMStore();
+  const { currentUser, updateCurrentUser, users, addUser, deleteUser, primaryColor, secondaryColor, updateThemeColors, company, updateCompany } = useCRMStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
 
@@ -11,6 +11,17 @@ export function Settings() {
     name: currentUser?.name || '',
     email: currentUser?.email || '',
   });
+
+  const [companyData, setCompanyData] = useState({
+    name: company?.name || '',
+    cnpj: company?.cnpj || '',
+    address: company?.address || '',
+    city: company?.city || '',
+    zipCode: company?.zipCode || '',
+    state: company?.state || '',
+    phone: company?.phone || '',
+  });
+  const [showCompanySaveSuccess, setShowCompanySaveSuccess] = useState(false);
 
   const [colors, setColors] = useState({
     primary: primaryColor,
@@ -86,6 +97,23 @@ export function Settings() {
     e.preventDefault();
     updateThemeColors(colors.primary, colors.secondary);
     alert('Cores do sistema atualizadas com sucesso!');
+  };
+
+  const handleSaveCompany = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (company) {
+      await updateCompany(company.id, {
+        name: companyData.name,
+        cnpj: companyData.cnpj,
+        address: companyData.address,
+        city: companyData.city,
+        zipCode: companyData.zipCode,
+        state: companyData.state,
+        phone: companyData.phone,
+      });
+      setShowCompanySaveSuccess(true);
+      setTimeout(() => setShowCompanySaveSuccess(false), 3000); // Oculta após 3 segundos
+    }
   };
 
   return (
@@ -186,8 +214,125 @@ export function Settings() {
         </div>
       </div>
 
+      {/* Informações da Empresa (Apenas Gerente) */}
+      {currentUser.role === 'gerente' && ( // Apenas gerentes podem gerenciar informações da empresa
+        <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-800 overflow-hidden transition-colors">
+          <div className="p-6 border-b border-gray-50 dark:border-zinc-800/50 flex items-center">
+            <Building2 className="w-6 h-6 text-gray-600 dark:text-gray-400 mr-3" />
+            <div>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">Informações da Empresa</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Gerencie os dados da sua loja/empresa.</p>
+            </div>
+          </div>
+          <div className="p-6 md:p-8">
+            <form onSubmit={handleSaveCompany} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label htmlFor="companyName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nome da Empresa</label>
+                  <input
+                    type="text"
+                    id="companyName"
+                    name="name"
+                    required
+                    value={companyData.name}
+                    onChange={(e) => setCompanyData({ ...companyData, name: e.target.value })}
+                    className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-xl focus:ring-primary focus:border-primary sm:text-sm"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="cnpj" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">CNPJ (Opcional)</label>
+                  <input
+                    type="text"
+                    id="cnpj"
+                    name="cnpj"
+                    value={companyData.cnpj}
+                    onChange={(e) => setCompanyData({ ...companyData, cnpj: e.target.value })}
+                    className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-xl focus:ring-primary focus:border-primary sm:text-sm"
+                    placeholder="XX.XXX.XXX/XXXX-XX"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="companyAddress" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Endereço da Empresa</label>
+                  <input
+                    type="text"
+                    id="companyAddress"
+                    name="address"
+                    value={companyData.address}
+                    onChange={(e) => setCompanyData({ ...companyData, address: e.target.value })}
+                    className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-xl focus:ring-primary focus:border-primary sm:text-sm"
+                    placeholder="Rua Exemplo, 123"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="companyCity" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Cidade</label>
+                  <input
+                    type="text"
+                    id="companyCity"
+                    name="city"
+                    value={companyData.city}
+                    onChange={(e) => setCompanyData({ ...companyData, city: e.target.value })}
+                    className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-xl focus:ring-primary focus:border-primary sm:text-sm"
+                    placeholder="São Paulo"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="companyZipCode" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">CEP</label>
+                  <input
+                    type="text"
+                    id="companyZipCode"
+                    name="zipCode"
+                    value={companyData.zipCode}
+                    onChange={(e) => setCompanyData({ ...companyData, zipCode: e.target.value })}
+                    className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-xl focus:ring-primary focus:border-primary sm:text-sm"
+                    placeholder="00000-000"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="companyState" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Estado</label>
+                  <input
+                    type="text"
+                    id="companyState"
+                    name="state"
+                    value={companyData.state}
+                    onChange={(e) => setCompanyData({ ...companyData, state: e.target.value })}
+                    className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-xl focus:ring-primary focus:border-primary sm:text-sm"
+                    placeholder="SP"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="companyPhone" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Telefone da Empresa</label>
+                  <input
+                    type="text"
+                    id="companyPhone"
+                    name="phone"
+                    value={companyData.phone}
+                    onChange={(e) => setCompanyData({ ...companyData, phone: e.target.value })}
+                    className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-xl focus:ring-primary focus:border-primary sm:text-sm"
+                    placeholder="(XX) XXXX-XXXX"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end">
+                {showCompanySaveSuccess && (
+                  <div className="text-green-600 dark:text-green-400 text-sm mr-4 flex items-center">
+                    <CheckCircle className="w-4 h-4 mr-1" /> Salvo!
+                  </div>
+                )}
+                <button
+                  type="submit"
+                  className="inline-flex items-center px-6 py-2 border border-transparent text-sm font-medium rounded-xl shadow-sm text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors"
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  Salvar Informações da Empresa
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Personalização do Sistema (Apenas Gerente) */}
-      {currentUser.role === 'gerente' && (
+      {currentUser.role === 'gerente' && ( // Apenas gerentes podem personalizar
         <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-primary-light dark:border-primary-light/50 overflow-hidden transition-colors">
           <div className="bg-primary-light dark:bg-primary-light/20 p-6 border-b border-primary-light dark:border-primary-light/50 flex items-center">
             <Paintbrush className="w-6 h-6 text-primary dark:text-primary mr-3" />

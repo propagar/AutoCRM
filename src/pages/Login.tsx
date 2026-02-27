@@ -8,6 +8,7 @@ export function Login() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [companyName, setCompanyName] = useState('');
   const [error, setError] = useState('');
   const { login, register, isLoading } = useCRMStore();
   const navigate = useNavigate();
@@ -25,7 +26,7 @@ export function Login() {
         setError('A senha deve ter no mínimo 6 caracteres.');
         return;
       }
-      const success = await register(name, email, password);
+      const success = await register(name, email, password, companyName);
       if (success) {
         navigate('/');
       } else {
@@ -62,20 +63,40 @@ export function Login() {
           <form className="space-y-6" onSubmit={handleSubmit}>
             {isRegistering && (
               <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Nome Completo
-                </label>
-                <div className="mt-1">
-                  <input
-                    id="name"
-                    name="name"
-                    type="text"
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="appearance-none block w-full px-3 py-3 border border-gray-300 dark:border-zinc-700 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm bg-white dark:bg-zinc-950 text-gray-900 dark:text-white transition-colors"
-                    placeholder="Seu nome"
-                  />
+                <div>
+                  <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Nome Completo
+                  </label>
+                  <div className="mt-1">
+                    <input
+                      id="name"
+                      name="name"
+                      type="text"
+                      required
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="appearance-none block w-full px-3 py-3 border border-gray-300 dark:border-zinc-700 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm bg-white dark:bg-zinc-950 text-gray-900 dark:text-white transition-colors"
+                      placeholder="Seu nome"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-6">
+                  <label htmlFor="companyName" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Nome da Empresa
+                  </label>
+                  <div className="mt-1">
+                    <input
+                      id="companyName"
+                      name="companyName"
+                      type="text"
+                      required
+                      value={companyName}
+                      onChange={(e) => setCompanyName(e.target.value)}
+                      className="appearance-none block w-full px-3 py-3 border border-gray-300 dark:border-zinc-700 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm bg-white dark:bg-zinc-950 text-gray-900 dark:text-white transition-colors"
+                      placeholder="Nome da sua loja/empresa"
+                    />
+                  </div>
                 </div>
               </div>
             )}

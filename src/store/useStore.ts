@@ -37,6 +37,7 @@ export interface User {
   password?: string; // Optional for now since we're mocking, but needed for login
   role: 'gerente' | 'vendedor';
   photoUrl?: string;
+  company_id?: string;
 }
 
 export interface Goals {
@@ -50,11 +51,25 @@ export interface UserGoal extends Goals {
   userId: string;
 }
 
+export interface Company {
+  id: string;
+  name: string;
+  cnpj?: string;
+  address?: string;
+  city?: string;
+  zipCode?: string;
+  state?: string;
+  phone?: string;
+  owner_id: string;
+  created_at: string;
+}
+
 interface CRMStore {
   isSidebarCollapsed: boolean;
   toggleSidebar: () => void;
   isAuthenticated: boolean;
   currentUser: User | null;
+  company: Company | null;
   users: User[];
   clients: Client[];
   goals: Goals;
@@ -67,10 +82,11 @@ interface CRMStore {
   isLoading: boolean;
   fetchInitialData: () => Promise<void>;
   login: (email: string, password?: string) => Promise<boolean>;
-  register: (name: string, email: string, password?: string) => Promise<boolean>;
+  register: (name: string, email: string, password?: string, companyName?: string) => Promise<boolean>;
   logout: () => Promise<void>;
   updateCurrentUser: (data: Partial<User>) => Promise<void>;
   addUser: (user: Omit<User, 'id'>) => Promise<void>;
+  updateCompany: (companyId: string, companyData: Partial<Company>) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
   addClient: (client: Omit<Client, 'id' | 'interactions' | 'createdAt' | 'stage'>) => Promise<void>;
   updateClient: (id: string, clientData: Partial<Client>) => Promise<void>;
@@ -85,6 +101,7 @@ interface CRMStore {
   toggleTheme: () => void;
   updateThemeColors: (primary: string, secondary: string) => void;
   resetAllSales: () => Promise<void>;
+  resetCurrentUsersSales: () => Promise<void>;
 }
 
 // Helper to map DB snake_case to App camelCase
@@ -123,6 +140,7 @@ export const useCRMStore = create<CRMStore>()(
       toggleSidebar: () => set(state => ({ isSidebarCollapsed: !state.isSidebarCollapsed })),
       isAuthenticated: false,
       currentUser: null,
+      company: null,
       users: [],
       clients: [],
       goals: {
@@ -146,6 +164,19 @@ export const useCRMStore = create<CRMStore>()(
       const { data: usersData } = await supabase.from('users').select('*');
       if (usersData) {
         set({ users: usersData.map(mapUserFromDB) });
+      }
+
+      // Fetch company data for the current user's company
+      const currentUserCompanyId = get().currentUser?.company_id;
+      if (currentUserCompanyId) {
+        const { data: companyData } = await supabase
+          .from('companies')
+          .select('*')
+          .eq('id', currentUserCompanyId)
+          .single();
+        if (companyData) {
+          set({ company: companyData });
+        }
       }
 
       // Fetch clients
@@ -194,6 +225,11 @@ export const useCRMStore = create<CRMStore>()(
           const userGoals = mappedAllGoals.find(g => g.userId === currentUser.id);
           if (userGoals) {
             set({ goals: userGoals });
+            // Se currentSales não for 0, zere todas as vendas
+            if (userGoals.currentSales > 0) {
+              console.log('Vendas diferentes de zero detectadas, zerando todas as vendas para 0.');
+              await get().resetAllSales();
+            }
           } else {
             // Create initial goals if missing
             const defaultGoals = {
@@ -299,14 +335,14 @@ export const useCRMStore = create<CRMStore>()(
     }
   },
 
-  register: async (name, email, password) => {
+  register: async (name, email, password, companyName) => {
     set({ isLoading: true });
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
         password: password || '',
         options: {
-          data: { name }, // Pass name to be used in the trigger
+          data: { name, companyName }, // Pass name and companyName to be used in the trigger
         },
       });
 
@@ -430,6 +466,25 @@ export const useCRMStore = create<CRMStore>()(
         current_prospects: 0,
         current_sales: 0
       }]);
+    }
+  },
+
+  updateCompany: async (companyId, companyData) => {
+    const updatePayload: any = {};
+    if (companyData.name !== undefined) updatePayload.name = companyData.name;
+    if (companyData.cnpj !== undefined) updatePayload.cnpj = companyData.cnpj;
+
+    const { error } = await supabase
+      .from('companies')
+      .update(updatePayload)
+      .eq('id', companyId);
+
+    if (error) {
+      console.error('Error updating company:', error);
+    } else {
+      set((state) => ({
+        company: state.company ? { ...state.company, ...companyData } : null,
+      }));
     }
   },
 
@@ -746,6 +801,26 @@ export const useCRMStore = create<CRMStore>()(
     set((state) => ({
       clients: state.clients.map(c => c.stage === 'Vendido' ? { ...c, stage: 'Contato Inicial' } : c),
       allGoals: state.allGoals.map(g => ({ ...g, currentSales: 0 })),
+      goals: { ...state.goals, currentSales: 0 },
+    }));
+  },
+
+  resetCurrentUsersSales: async () => {
+    const currentUser = get().currentUser;
+    if (!currentUser) return;
+
+    const { error: goalsError } = await supabase
+      .from('goals')
+      .update({ current_sales: 0 })
+      .eq('user_id', currentUser.id);
+    
+    if (goalsError) {
+      console.error('Error resetting current user sales:', goalsError);
+      return;
+    }
+
+    set((state) => ({
+      allGoals: state.allGoals.map(g => g.userId === currentUser.id ? { ...g, currentSales: 0 } : g),
       goals: { ...state.goals, currentSales: 0 },
     }));
   },

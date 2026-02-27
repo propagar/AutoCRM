@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useCRMStore } from '../store/useStore';
-import { Target, TrendingUp, Award, Users, ChevronDown, Save } from 'lucide-react';
+import { Target, TrendingUp, Award, Users, ChevronDown, Save, RefreshCcw } from 'lucide-react';
 import { cn } from '../utils/cn';
 
 export function Goals() {
-  const { goals, allGoals, users, updateGoals, updateUserGoals, currentUser } = useCRMStore();
+  const { goals, allGoals, users, updateGoals, updateUserGoals, currentUser, resetCurrentUsersSales } = useCRMStore();
   
   const [isManagerView, setIsManagerView] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string>('');
@@ -150,6 +150,14 @@ export function Goals() {
                     ? '🏆 Meta batida!' 
                     : `Faltam ${Math.max(0, goals.monthlySales - goals.currentSales)} vendas.`}
                 </p>
+                <div className="mt-4 text-center">
+                  <button 
+                    onClick={resetCurrentUsersSales}
+                    className="text-xs text-red-600 dark:text-red-400 hover:underline"
+                  >
+                    Zerar esta meta pessoal.
+                  </button>
+                </div>
               </div>
             </div>
           </section>
