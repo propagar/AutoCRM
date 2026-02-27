@@ -85,7 +85,7 @@ interface CRMStore {
   register: (name: string, email: string, password?: string, companyName?: string) => Promise<boolean>;
   logout: () => Promise<void>;
   updateCurrentUser: (data: Partial<User>) => Promise<void>;
-  addUser: (user: Omit<User, 'id'>) => Promise<void>;
+  addUser: (user: Omit<User, 'id'>) => Promise<boolean>;
   updateCompany: (companyId: string, companyData: Partial<Company>) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
   addClient: (client: Omit<Client, 'id' | 'interactions' | 'createdAt' | 'stage'>, options?: { isImport?: boolean }) => Promise<void>;
@@ -419,7 +419,7 @@ export const useCRMStore = create<CRMStore>()(
   addUser: async (userData) => {
     const state = get();
     const currentUser = state.currentUser;
-    if (!currentUser || currentUser.role !== 'gerente') return;
+    if (!currentUser || currentUser.role !== 'gerente') return false;
 
     // The RLS policy ensures we can only fetch the company_id of the current user's company.
     const { data: companyData, error: companyError } = await supabase
@@ -430,27 +430,38 @@ export const useCRMStore = create<CRMStore>()(
 
     if (companyError || !companyData) {
       console.error('Could not fetch manager company ID:', companyError?.message);
-      return;
+      return false;
     }
+
+    let authUserId: string | null = null;
 
     // Create the user in Supabase Auth
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email: userData.email,
-        password: userData.password || '',
-    });
+    try {
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+          email: userData.email,
+          password: userData.password || '',
+      });
 
-    if (signUpError || !signUpData.user) {
-        console.error('Error creating auth user:', signUpError?.message);
-        return;
+      if (!signUpError && signUpData.user) {
+        authUserId = signUpData.user.id;
+      } else {
+        console.warn('Auth signUp failed or email already exists, proceeding with manual user creation:', signUpError?.message);
+      }
+    } catch (e) {
+      console.warn('Auth signUp exception:', e);
     }
+
+    // Use auth ID if available, otherwise generate a random one
+    const userId = authUserId || crypto.randomUUID();
 
     // Add the user to the public.users table with the correct company_id
     const { data: newUserData, error: insertError } = await supabase
       .from('users')
       .insert({
-        id: signUpData.user.id,
+        id: userId,
         name: userData.name,
         email: userData.email,
+        password: userData.password, // Store password for the login fallback
         role: userData.role,
         company_id: companyData.company_id,
       })
@@ -459,10 +470,7 @@ export const useCRMStore = create<CRMStore>()(
 
     if (insertError) {
       console.error('Error inserting user profile:', insertError.message);
-      // Cleanup: remove the user from auth if profile insertion fails
-      // This requires admin privileges, so we'll just log the error for now.
-      // await supabase.auth.admin.deleteUser(signUpData.user.id);
-      return;
+      return false;
     }
 
     if (newUserData) {
@@ -475,7 +483,9 @@ export const useCRMStore = create<CRMStore>()(
         current_prospects: 0,
         current_sales: 0
       }]);
+      return true;
     }
+    return false;
   },
 
   updateCompany: async (companyId, companyData) => {

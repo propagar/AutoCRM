@@ -74,9 +74,13 @@ export function Settings() {
       return;
     }
     
-    await addUser(newUser);
-    setNewUser({ name: '', email: '', password: '', role: 'vendedor' });
-    alert('Usuário adicionado com sucesso!');
+    const success = await addUser(newUser);
+    if (success) {
+      setNewUser({ name: '', email: '', password: '', role: 'vendedor' });
+      alert('Usuário adicionado com sucesso!');
+    } else {
+      alert('Erro ao adicionar usuário. Verifique os dados ou se o e-mail já está em uso.');
+    }
   };
 
   const toggleUserExpanded = (userId: string) => {
